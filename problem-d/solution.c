@@ -7,7 +7,7 @@
  *                                                        |
  *                                                    parent
  *
- * Parent reads the file line by line and writes lines into pipe1.
+ * Parent reads the file line-by-line and writes each line into pipe1.
  * Child1 lowercases each line and writes it to pipe2.
  * Child2 counts vowels across all lines and writes the total to pipe3.
  * Parent reads the total from pipe3 and prints it.
@@ -18,7 +18,6 @@
 #include <string.h>
 #include <ctype.h>
 #include <unistd.h>
-#include <fcntl.h>
 #include <sys/wait.h>
 
 #define BUFSIZE 4096
@@ -93,7 +92,7 @@ int main(int argc, char *argv[]) {
         exit(0);
     }
 
-    /* ---- Parent: read file, send to child1, receive result ---- */
+    /* ---- Parent: read file line-by-line, send to child1, receive result ---- */
     close(pipe1[0]);
     close(pipe2[0]); close(pipe2[1]);
     close(pipe3[1]);
@@ -101,13 +100,15 @@ int main(int argc, char *argv[]) {
     FILE *f = fopen(argv[1], "r");
     if (!f) { perror("fopen"); exit(1); }
 
-    char buf[BUFSIZE];
-    size_t bytes;
-    while ((bytes = fread(buf, 1, sizeof(buf), f)) > 0) {
-        printf("[parent] sending %zu bytes to child1\n", bytes);
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t nread;
+    while ((nread = getline(&line, &len, f)) != -1) {
+        printf("[parent] sending line (%zd bytes) to child1\n", nread);
         fflush(stdout);
-        write(pipe1[1], buf, bytes);
+        write(pipe1[1], line, nread);
     }
+    free(line);
     fclose(f);
     close(pipe1[1]); /* signal EOF to child1 */
 

@@ -32,15 +32,15 @@ int main(int argc, char *argv[]) {
         if (pid == -1) { perror("fork"); exit(1); }
 
         if (pid == 0) {
-            /* Close all pipes except this child's write-end */
-            for (int j = 0; j < N; j++) {
-                if (j == i) {
-                    close(pipes[j][0]);
-                } else {
-                    close(pipes[j][0]);
-                    close(pipes[j][1]);
-                }
+            /* Only close pipes that have actually been created (j <= i).
+             * Pipes for j > i do not exist yet — their slots are uninitialised.
+             * The parent has not yet closed any write-ends (done after all forks),
+             * so all FD numbers are stable and unique. */
+            for (int j = 0; j < i; j++) {
+                close(pipes[j][0]);
+                close(pipes[j][1]);
             }
+            close(pipes[i][0]); /* close our own read-end */
 
             srand(time(NULL) ^ (getpid() << 4));
 
@@ -55,10 +55,13 @@ int main(int argc, char *argv[]) {
             free(pipes);
             exit(0);
         }
-
-        /* Parent: close write-end of this child's pipe */
-        close(pipes[i][1]);
+        /* Do NOT close write-ends here — doing so causes FD reuse before later
+         * children fork, leading to double-closes in their cleanup loops. */
     }
+
+    /* Parent: now that all children are forked, close all write-ends. */
+    for (int i = 0; i < N; i++)
+        close(pipes[i][1]);
 
     /* Parent reads from all pipes */
     long sum = 0;

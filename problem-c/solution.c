@@ -46,6 +46,8 @@ int main(int argc, char *argv[]) {
     int extra = N % K;
     int offset = 0;
 
+    /* Fork all children first — no pipes are closed until all children exist,
+     * so every child inherits a fully-initialised, stable FD table. */
     for (int i = 0; i < K; i++) {
         int chunk_size = base + (i < extra ? 1 : 0);
 
@@ -88,12 +90,15 @@ int main(int argc, char *argv[]) {
             free(nums); free(pc); free(cp);
             exit(0);
         }
+    }
 
-        /* Parent: close child-side ends */
+    /* Parent: close child-side pipe ends and send chunks */
+    for (int i = 0; i < K; i++) {
+        int chunk_size = base + (i < extra ? 1 : 0);
+
         close(pc[i][0]);
         close(cp[i][1]);
 
-        /* Send chunk to child */
         printf("[parent] sending %d integers to child %d\n", chunk_size, i);
         fflush(stdout);
         write(pc[i][1], nums + offset, chunk_size * sizeof(int));
